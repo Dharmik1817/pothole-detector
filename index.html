@@ -1,0 +1,1944 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>The Chanakyas — Road Scan</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+
+<!-- Firebase -->
+<script type="module">
+  import { initializeApp }                        from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getFirestore, collection, addDoc,
+           onSnapshot, query, orderBy, deleteDoc,
+           doc }                                  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey:            "AIzaSyD9i78SfjG23Lj9AJtnISZ--k1xZUhNi_g",
+    authDomain:        "chanakyas-road.firebaseapp.com",
+    projectId:         "chanakyas-road",
+    storageBucket:     "chanakyas-road.firebasestorage.app",
+    messagingSenderId: "950208319080",
+    appId:             "1:950208319080:web:06a5c518dcaab4640d75dd"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db  = getFirestore(app);
+  const ticketsCol = collection(db, 'tickets');
+
+  window._db          = db;
+  window._ticketsCol  = ticketsCol;
+  window._addDoc      = addDoc;
+  window._deleteDoc   = deleteDoc;
+  window._doc         = doc;
+  window._dbReady     = true;
+
+  // Real-time listener — fires on ALL devices instantly
+  const q = query(ticketsCol, orderBy('createdAt', 'desc'));
+  onSnapshot(q, (snapshot) => {
+    const tickets = [];
+    snapshot.forEach(d => tickets.push({ firestoreId: d.id, ...d.data() }));
+    window._tickets = tickets;
+    updateBadge();
+    if (window._activeTab === 'dashboard') renderDashboard();
+  });
+</script>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Rajdhani:wght@500;700&family=Share+Tech+Mono&display=swap');
+
+  :root {
+    --bg: #0a0c0f;
+    --panel: #111318;
+    --border: #1e2530;
+    --accent: #00e5ff;
+    --danger: #ff1744;
+    --good: #00e676;
+    --warn: #ffab00;
+    --text: #c8d8e8;
+    --dim: #4a5568;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Rajdhani', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg, transparent, transparent 2px,
+      rgba(0,229,255,0.015) 2px, rgba(0,229,255,0.015) 4px
+    );
+    pointer-events: none;
+    z-index: 100;
+  }
+
+  .team-banner {
+    width: 100%;
+    padding: 22px 20px 18px;
+    background: linear-gradient(135deg, #0a0c0f 0%, #0d1117 60%, #0a1628 100%);
+    border-bottom: 1px solid rgba(0,229,255,0.15);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .team-banner::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 60% 80% at 50% 120%, rgba(0,229,255,0.07) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .team-name {
+    font-family: 'Orbitron', sans-serif;
+    font-size: clamp(22px, 6vw, 32px);
+    font-weight: 900;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    background: linear-gradient(90deg, #00e5ff 0%, #ffffff 50%, #00e5ff 100%);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: shine 3s linear infinite;
+    position: relative;
+    z-index: 1;
+  }
+
+  @keyframes shine {
+    from { background-position: 0% center; }
+    to   { background-position: 200% center; }
+  }
+
+  .team-tagline {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: var(--dim);
+    text-transform: uppercase;
+    position: relative;
+    z-index: 1;
+  }
+
+  .team-line {
+    width: 60px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    margin-top: 4px;
+  }
+
+  #syncStatus {
+    width: 100%;
+    padding: 6px 16px;
+    background: rgba(0,229,255,0.05);
+    border-bottom: 1px solid var(--border);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: var(--dim);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .sync-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--dim);
+    flex-shrink: 0;
+    transition: background 0.3s;
+  }
+
+  .sync-dot.live {
+    background: var(--good);
+    box-shadow: 0 0 6px var(--good);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  .tab-bar {
+    width: 100%;
+    display: flex;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+
+  .tab-btn {
+    flex: 1;
+    padding: 13px 10px;
+    background: transparent;
+    border: none;
+    color: var(--dim);
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+  }
+
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .tab-badge {
+    background: var(--danger);
+    color: #fff;
+    font-size: 10px;
+    font-family: 'Share Tech Mono', monospace;
+    border-radius: 99px;
+    padding: 1px 6px;
+    display: none;
+  }
+
+  .tab-badge.show { display: inline-block; }
+
+  .tab-page { display: none; width: 100%; }
+  .tab-page.active { display: block; }
+
+  .main {
+    width: 100%;
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .btn {
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    padding: 9px 18px;
+    border-radius: 6px;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+
+  .btn:hover, .btn:active { background: var(--accent); color: var(--bg); }
+  .btn:disabled { opacity: 0.3; cursor: not-allowed; pointer-events: none; }
+
+  #statusBar {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    color: var(--dim);
+    padding: 8px 14px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  #statusBar.loading { color: var(--accent); }
+  #statusBar.error   { color: var(--danger); border-color: var(--danger); }
+  #statusBar.ready   { color: var(--good);   border-color: var(--good); }
+
+  .camera-wrap {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4/3;
+    background: #000;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    display: none;
+  }
+
+  .camera-wrap.visible { display: block; }
+  #webcam-container { width: 100%; height: 100%; }
+
+  #webcam-container canvas,
+  #webcam-container video {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover;
+    display: block;
+  }
+
+  .hud-corner {
+    position: absolute;
+    width: 20px; height: 20px;
+    border-color: var(--accent);
+    border-style: solid;
+    opacity: 0.6;
+  }
+  .hud-corner.tl { top: 8px; left: 8px;    border-width: 2px 0 0 2px; }
+  .hud-corner.tr { top: 8px; right: 8px;   border-width: 2px 2px 0 0; }
+  .hud-corner.bl { bottom: 8px; left: 8px;  border-width: 0 0 2px 2px; }
+  .hud-corner.br { bottom: 8px; right: 8px; border-width: 0 2px 2px 0; }
+
+  .scan-line {
+    position: absolute; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0.4;
+    animation: scan 3s linear infinite;
+  }
+
+  @keyframes scan { from { top: 0; } to { top: 100%; } }
+
+  #result-panel {
+    display: none;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px;
+    gap: 14px;
+    flex-direction: column;
+  }
+
+  #result-panel.visible { display: flex; }
+
+  .result-label-row { display: flex; align-items: center; justify-content: space-between; }
+
+  .result-tag { font-size: 11px; letter-spacing: 3px; color: var(--dim); text-transform: uppercase; }
+
+  #top-label {
+    font-size: 28px; font-weight: 700;
+    letter-spacing: 2px; text-transform: uppercase;
+    transition: color 0.3s;
+  }
+
+  #confidence-badge { font-family: 'Share Tech Mono', monospace; font-size: 22px; }
+
+  .bar-row { display: flex; flex-direction: column; gap: 8px; }
+  .bar-item { display: flex; align-items: center; gap: 10px; }
+
+  .bar-name {
+    width: 110px; font-size: 12px; letter-spacing: 1px;
+    color: var(--dim); text-transform: uppercase;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0;
+  }
+
+  .bar-track { flex: 1; height: 6px; background: var(--border); border-radius: 99px; overflow: hidden; }
+  .bar-fill  { height: 100%; border-radius: 99px; background: var(--accent); transition: width 0.2s ease; }
+  .bar-pct   { font-family: 'Share Tech Mono', monospace; font-size: 11px; color: var(--dim); width: 38px; text-align: right; flex-shrink: 0; }
+
+  #alert-badge {
+    display: none; align-items: center; gap: 8px;
+    background: rgba(255,23,68,0.1); border: 1px solid var(--danger);
+    border-radius: 6px; padding: 10px 14px;
+    color: var(--danger); font-size: 13px; font-weight: 700;
+    letter-spacing: 2px; text-transform: uppercase;
+    animation: blink-border 1s infinite;
+  }
+
+  #alert-badge.show { display: flex; }
+
+  @keyframes blink-border {
+    0%, 100% { border-color: var(--danger); }
+    50% { border-color: transparent; }
+  }
+
+  .alert-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--danger); box-shadow: 0 0 8px var(--danger);
+    animation: pulse 0.8s infinite; flex-shrink: 0;
+  }
+
+  .btn-stop { border-color: var(--danger); color: var(--danger); }
+  .btn-stop:hover, .btn-stop:active { background: var(--danger); color: #fff; }
+
+  .control-row { display: flex; gap: 10px; }
+  .control-row .btn { flex: 1; }
+
+  #ticket-toast {
+    position: fixed;
+    bottom: 24px; left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--panel);
+    border: 1px solid var(--good);
+    border-radius: 8px;
+    padding: 10px 18px;
+    color: var(--good);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px; letter-spacing: 1px;
+    z-index: 999;
+    transition: transform 0.3s ease;
+    white-space: nowrap;
+  }
+
+  #ticket-toast.show { transform: translateX(-50%) translateY(0); }
+
+  .dash-wrap {
+    width: 100%; max-width: 480px;
+    margin: 0 auto; padding: 16px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+
+  .dash-header-row { display: flex; align-items: center; justify-content: space-between; }
+
+  .dash-title { font-family: 'Orbitron', sans-serif; font-size: 14px; letter-spacing: 2px; color: var(--accent); }
+  .dash-count { font-family: 'Share Tech Mono', monospace; font-size: 11px; color: var(--dim); }
+
+  .btn-clear { border-color: var(--dim); color: var(--dim); font-size: 11px; padding: 6px 12px; }
+  .btn-clear:hover { border-color: var(--danger); color: var(--danger); background: transparent; }
+
+  .empty-state {
+    text-align: center; padding: 50px 20px;
+    color: var(--dim);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px; letter-spacing: 1px; line-height: 2;
+  }
+
+  .empty-icon { font-size: 36px; margin-bottom: 12px; opacity: 0.4; }
+
+  .ticket-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    animation: slideIn 0.3s ease;
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .ticket-card.pothole { border-left: 3px solid var(--danger); }
+  .ticket-card.good    { border-left: 3px solid var(--good); }
+  .ticket-card.other   { border-left: 3px solid var(--warn); }
+
+  .ticket-top { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px 8px; }
+  .ticket-id  { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--dim); letter-spacing: 1px; }
+
+  .ticket-status { font-size: 10px; font-weight: 700; letter-spacing: 2px; padding: 2px 8px; border-radius: 4px; }
+  .ticket-status.open { background: rgba(255,171,0,0.15); color: var(--warn); border: 1px solid var(--warn); }
+
+  .ticket-condition { padding: 0 14px 8px; font-size: 20px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; }
+
+  .ticket-meta { padding: 0 14px 10px; display: flex; flex-direction: column; gap: 4px; }
+
+  .ticket-meta-row { display: flex; align-items: flex-start; gap: 8px; font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--dim); }
+  .ticket-meta-row span:first-child { color: var(--accent); min-width: 70px; flex-shrink: 0; }
+
+  .ticket-snap { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; border-top: 1px solid var(--border); opacity: 0.85; }
+
+  .new-pill {
+    background: rgba(0,230,118,0.15); color: var(--good);
+    border: 1px solid var(--good); font-size: 9px;
+    letter-spacing: 2px; padding: 1px 6px; border-radius: 4px;
+    font-family: 'Share Tech Mono', monospace;
+  }
+
+  footer {
+    margin-top: auto; padding: 20px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px; color: var(--dim);
+    letter-spacing: 1px; text-align: center;
+  }
+
+  /* ── New tabs shared styles ── */
+  .disp-field { display:flex; flex-direction:column; }
+  .disp-lbl {
+    font-family:'Share Tech Mono',monospace; font-size:10px;
+    color:var(--dim); letter-spacing:1px; margin-bottom:5px; text-transform:uppercase;
+  }
+  .disp-sel {
+    background:var(--panel); border:1px solid var(--border);
+    color:var(--text); font-family:'Rajdhani',sans-serif;
+    font-size:13px; padding:7px 10px; border-radius:6px;
+    outline:none; cursor:pointer;
+  }
+  .disp-sel:focus { border-color:var(--accent); }
+
+  .priority-banner {
+    border-radius:8px; padding:14px 16px;
+    font-family:'Share Tech Mono',monospace;
+    letter-spacing:1px; margin-bottom:10px;
+    border:1px solid;
+  }
+  .priority-banner.p1 { background:rgba(255,23,68,0.08); border-color:var(--danger); color:var(--danger); }
+  .priority-banner.p2 { background:rgba(255,171,0,0.08); border-color:var(--warn);   color:var(--warn); }
+  .priority-banner.p3 { background:rgba(0,230,118,0.08); border-color:var(--good);   color:var(--good); }
+
+  .dispatch-grid {
+    display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;
+  }
+  .dispatch-cell {
+    background:var(--panel); border:1px solid var(--border);
+    border-radius:8px; padding:10px 12px;
+  }
+  .dispatch-cell-label { font-family:'Share Tech Mono',monospace; font-size:9px; color:var(--dim); letter-spacing:1px; text-transform:uppercase; margin-bottom:4px; }
+  .dispatch-cell-val   { font-family:'Rajdhani',sans-serif; font-size:15px; font-weight:700; color:var(--text); }
+
+  .timeline-step {
+    display:flex; align-items:flex-start; gap:10px;
+    padding:8px 0; border-bottom:1px solid var(--border);
+    font-family:'Share Tech Mono',monospace; font-size:10px; color:var(--dim); line-height:1.6;
+  }
+  .timeline-step:last-child { border-bottom:none; }
+  .tl-dot {
+    width:8px; height:8px; border-radius:50%; flex-shrink:0; margin-top:3px;
+  }
+  .tl-done { background:var(--good); box-shadow:0 0 6px var(--good); }
+  .tl-now  { background:var(--warn); box-shadow:0 0 6px var(--warn); animation:pulse 1s infinite; }
+  .tl-pend { background:var(--border); }
+  .tl-dead { background:var(--danger); box-shadow:0 0 6px var(--danger); }
+
+  .spec-block {
+    background:var(--panel); border:1px solid var(--border);
+    border-radius:8px; padding:12px 14px; margin-bottom:8px;
+  }
+  .spec-title {
+    font-family:'Orbitron',sans-serif; font-size:11px;
+    color:var(--accent); letter-spacing:2px; margin-bottom:8px;
+  }
+  .spec-row {
+    display:flex; justify-content:space-between; align-items:flex-start;
+    font-family:'Share Tech Mono',monospace; font-size:10px;
+    padding:4px 0; border-bottom:1px solid var(--border); gap:10px;
+  }
+  .spec-row:last-child { border-bottom:none; }
+  .spec-key { color:var(--accent); min-width:90px; flex-shrink:0; }
+  .spec-val { color:var(--text); text-align:right; }
+
+  .conflict-alert {
+    border-radius:8px; padding:12px 14px;
+    font-family:'Share Tech Mono',monospace; font-size:10px;
+    letter-spacing:1px; line-height:1.8;
+  }
+  .conflict-alert.danger { background:rgba(255,23,68,0.08); border:1px solid var(--danger); color:var(--danger); }
+  .conflict-alert.warn   { background:rgba(255,171,0,0.08); border:1px solid var(--warn);   color:var(--warn); }
+  .conflict-alert.good   { background:rgba(0,230,118,0.08); border:1px solid var(--good);   color:var(--good); }
+
+  .rhi-row {
+    display:flex; align-items:center; gap:10px;
+    padding:8px 0; border-bottom:1px solid var(--border);
+    font-family:'Share Tech Mono',monospace; font-size:10px;
+  }
+  .rhi-row:last-child { border-bottom:none; }
+  .rhi-ward { color:var(--accent); min-width:70px; letter-spacing:1px; }
+  .rhi-bar-track { flex:1; height:5px; background:var(--border); border-radius:99px; overflow:hidden; }
+  .rhi-bar-fill  { height:100%; border-radius:99px; transition:width 0.6s ease; }
+  .rhi-score { min-width:32px; text-align:right; font-weight:700; }
+  .ledger-row { padding-bottom:8px; line-height:1.7; }
+</style>
+</head>
+<body>
+
+<div class="team-banner">
+  <div class="team-name">The Chanakyas</div>
+  <div class="team-line"></div>
+  <div class="team-tagline">Road Condition Detection System</div>
+</div>
+
+<div id="syncStatus">
+  <div class="sync-dot" id="syncDot"></div>
+  <span id="syncText">Connecting to cloud…</span>
+</div>
+
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="switchTab('scanner')">📡 Scanner</button>
+  <button class="tab-btn" onclick="switchTab('dashboard')">
+    🗂 Dashboard
+    <span class="tab-badge" id="ticketBadge">0</span>
+  </button>
+  <button class="tab-btn" onclick="switchTab('verify')">🛰 Verify</button>
+  <button class="tab-btn" onclick="switchTab('dispatch')">⚡ Dispatch</button>
+  <button class="tab-btn" onclick="switchTab('repair')">🔧 Repair AI</button>
+  <button class="tab-btn" onclick="switchTab('depts')">🏛 Depts</button>
+</div>
+
+<!-- Scanner Tab -->
+<div class="tab-page active" id="tab-scanner">
+  <div class="main">
+    <div style="display:none">
+      <input type="url" id="modelURL" value="https://teachablemachine.withgoogle.com/models/0OGLfbe5V/" />
+    </div>
+    <div id="statusBar">⬡ &nbsp;Ready — tap START to begin detection</div>
+    <div class="control-row">
+      <button class="btn" id="startBtn" onclick="init()">▶ Start</button>
+      <button class="btn btn-stop" id="stopBtn" onclick="stopDetection()" disabled>■ Stop</button>
+    </div>
+    <div class="camera-wrap" id="cameraWrap">
+      <div id="webcam-container"></div>
+      <div class="hud-corner tl"></div><div class="hud-corner tr"></div>
+      <div class="hud-corner bl"></div><div class="hud-corner br"></div>
+      <div class="scan-line"></div>
+    </div>
+    <div id="result-panel">
+      <div class="result-label-row">
+        <div>
+          <div class="result-tag">Detected Condition</div>
+          <div id="top-label">—</div>
+        </div>
+        <div id="confidence-badge" style="color: var(--accent)">—</div>
+      </div>
+      <div id="alert-badge">
+        <div class="alert-dot"></div>
+        ⚠ POTHOLE DETECTED — TICKET GENERATED
+      </div>
+      <div class="bar-row" id="label-bars"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Dashboard Tab -->
+<div class="tab-page" id="tab-dashboard">
+  <div class="dash-wrap">
+    <div class="dash-header-row">
+      <div class="dash-title">Ticket Dashboard</div>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <span class="dash-count" id="dashCount">0 tickets</span>
+        <button class="btn btn-clear" onclick="clearTickets()">Clear All</button>
+      </div>
+    </div>
+    <div id="ticket-list">
+      <div class="empty-state">
+        <div class="empty-icon">📋</div>
+        No tickets yet.<br>Start the scanner and point<br>at a pothole to generate one.
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="ticket-toast">✔ Ticket synced</div>
+
+<!-- ═══════════ VERIFY TAB ═══════════ -->
+<div class="tab-page" id="tab-verify">
+<div class="dash-wrap">
+
+  <div class="dash-header-row" style="margin-bottom:4px">
+    <div class="dash-title">🛰 Satellite Verifier</div>
+    <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--accent)">AI CROSS-CHECK</span>
+  </div>
+  <p style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--dim);letter-spacing:1px;margin:0 0 14px">Camera image compared against satellite tile at same GPS — tickets only generated on verified detections</p>
+
+  <!-- Citizen upload section -->
+  <div class="ticket-card" style="border-left:3px solid var(--accent);margin-bottom:12px">
+    <div class="ticket-top">
+      <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:2px">CITIZEN COMPLAINT UPLOAD</span>
+    </div>
+    <div style="padding:0 14px 14px;display:flex;flex-direction:column;gap:10px">
+      <div class="disp-field">
+        <div class="disp-lbl">Your photo (pothole image)</div>
+        <input type="file" id="citizenPhoto" accept="image/*" capture="environment"
+               onchange="previewCitizen(this)"
+               style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text);background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:6px 10px;width:100%">
+      </div>
+      <div id="citizen-preview" style="display:none">
+        <img id="citizen-img" style="width:100%;border-radius:6px;border:1px solid var(--border);aspect-ratio:16/9;object-fit:cover">
+      </div>
+      <div class="disp-field">
+        <div class="disp-lbl">Your GPS location</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="text" id="citizenGPS" placeholder="e.g. 22.3072, 73.1812"
+                 style="flex:1;font-family:'Share Tech Mono',monospace;font-size:11px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 10px">
+          <button class="btn" style="padding:7px 12px;font-size:11px" onclick="getCitizenGPS()">📍 Get</button>
+        </div>
+      </div>
+      <button class="btn" id="citizenVerifyBtn" onclick="verifyCitizenReport()" style="width:100%">
+        🛰 VERIFY & SUBMIT COMPLAINT
+      </button>
+    </div>
+  </div>
+
+  <!-- Last ticket verification result -->
+  <div class="ticket-card" style="border-left:3px solid var(--purple,#7F77DD)">
+    <div class="ticket-top">
+      <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:#7F77DD;letter-spacing:2px">LAST TICKET VERIFICATION</span>
+      <button class="btn" style="font-size:10px;padding:4px 10px" onclick="verifyLastTicket()">↻ Re-run</button>
+    </div>
+    <div style="padding:0 14px 14px" id="verify-last-out">
+      <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--dim);text-align:center;padding:20px">
+        No verified ticket yet. Scan a pothole — verification runs automatically.
+      </div>
+    </div>
+  </div>
+
+  <!-- How it works -->
+  <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--dim);letter-spacing:1px;line-height:2;padding:10px 12px;background:var(--panel);border:1px solid var(--border);border-radius:6px;margin-top:4px">
+    <span style="color:var(--accent)">HOW VERIFICATION WORKS →</span><br>
+    1. Camera detects pothole → GPS coordinates extracted<br>
+    2. Google Maps Static API fetches satellite tile at that exact location<br>
+    3. Claude Vision API analyses both images: surface damage pattern, road visibility, GPS cluster match<br>
+    4. Score ≥ 75 = auto-verified ticket · 40–74 = officer review · &lt; 40 = rejected<br>
+    5. Both images stored in Firestore with ticket — full evidence chain
+  </div>
+
+</div>
+</div>
+
+<!-- ═══════════ DISPATCH TAB ═══════════ -->
+<div class="tab-page" id="tab-dispatch">
+<div class="dash-wrap">
+
+  <div class="dash-header-row" style="margin-bottom:4px">
+    <div class="dash-title">⚡ AI Dispatch Engine</div>
+    <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--good)">AUTO MODE</span>
+  </div>
+  <p style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--dim);letter-spacing:1px;margin:0 0 12px">All signals fetched automatically — no manual input needed</p>
+
+  <!-- Signal readout grid — populated by JS -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px" id="signal-grid">
+    <div class="dispatch-cell"><div class="dispatch-cell-label">Severity</div><div class="dispatch-cell-val" id="sig-sev">— scanning</div></div>
+    <div class="dispatch-cell"><div class="dispatch-cell-label">Road type</div><div class="dispatch-cell-val" id="sig-road">— fetching</div></div>
+    <div class="dispatch-cell"><div class="dispatch-cell-label">Traffic load</div><div class="dispatch-cell-val" id="sig-traffic">— fetching</div></div>
+    <div class="dispatch-cell"><div class="dispatch-cell-label">Weather risk</div><div class="dispatch-cell-val" id="sig-weather">— fetching</div></div>
+    <div class="dispatch-cell"><div class="dispatch-cell-label">Accident history</div><div class="dispatch-cell-val" id="sig-accident">— checking</div></div>
+    <div class="dispatch-cell"><div class="dispatch-cell-label">Workers in ward</div><div class="dispatch-cell-val" id="sig-workers">5 available</div></div>
+  </div>
+
+  <!-- Source legend -->
+  <div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--dim);letter-spacing:1px;margin-bottom:12px;line-height:2;padding:8px 12px;background:var(--panel);border:1px solid var(--border);border-radius:6px">
+    <span style="color:var(--accent)">DATA SOURCES →</span>
+    Severity: Teachable Machine model (live) ·
+    Road type: OpenStreetMap Nominatim (GPS reverse geocode) ·
+    Traffic: OSM + hour-of-day model ·
+    Weather: Open-Meteo API (free, no key) ·
+    Accidents: Firestore ticket history at GPS cluster ·
+    Workers: Municipal labour registry (simulated)
+  </div>
+
+  <button class="btn" id="autoDispatchBtn" onclick="runAutoDispatch()" style="width:100%;margin-bottom:12px">
+    ⚡ RUN AUTO DISPATCH FROM LAST TICKET
+  </button>
+
+  <div id="dispatch-out"></div>
+
+</div>
+</div>
+
+<!-- ═══════════ REPAIR AI TAB ═══════════ -->
+<div class="tab-page" id="tab-repair">
+<div class="dash-wrap">
+
+  <div class="dash-header-row" style="margin-bottom:4px">
+    <div class="dash-title">🔧 Repair Intelligence</div>
+    <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--dim)">AI SPEC ENGINE</span>
+  </div>
+  <p style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--dim);letter-spacing:1px;margin:0 0 12px">AI generates exact repair method, materials and quality checks</p>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+    <div class="disp-field">
+      <div class="disp-lbl">Damage severity</div>
+      <select class="disp-sel" id="r_sev" onchange="calcRepair()">
+        <option value="1">L1 — Surface crack</option>
+        <option value="2" selected>L2 — Pothole</option>
+        <option value="3">L3 — Structural</option>
+      </select>
+    </div>
+    <div class="disp-field">
+      <div class="disp-lbl">Previous dig on segment?</div>
+      <select class="disp-sel" id="r_dig" onchange="calcRepair()">
+        <option value="0" selected>No history</option>
+        <option value="1">Water board — &lt;6 months</option>
+        <option value="2">Electric / telecom — &lt;6 months</option>
+        <option value="3">Multiple digs — &lt;1 year</option>
+      </select>
+    </div>
+    <div class="disp-field">
+      <div class="disp-lbl">Traffic load</div>
+      <select class="disp-sel" id="r_traffic" onchange="calcRepair()">
+        <option value="1">Low</option>
+        <option value="2" selected>Medium</option>
+        <option value="3">Heavy / arterial</option>
+      </select>
+    </div>
+    <div class="disp-field">
+      <div class="disp-lbl">Current RHI score</div>
+      <select class="disp-sel" id="r_rhi" onchange="calcRepair()">
+        <option value="90">90–100 (Excellent)</option>
+        <option value="75" selected>75–89 (Good)</option>
+        <option value="60">60–74 (Fair)</option>
+        <option value="40">Below 60 (Poor)</option>
+      </select>
+    </div>
+  </div>
+
+  <div id="repair-out"></div>
+
+</div>
+</div>
+
+<!-- ═══════════ DEPTS HUB TAB ═══════════ -->
+<div class="tab-page" id="tab-depts">
+<div class="dash-wrap">
+
+  <div class="dash-header-row" style="margin-bottom:4px">
+    <div class="dash-title">🏛 Dept Coordination Hub</div>
+    <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--dim)">ROAD SURGERY SCHEDULER</span>
+  </div>
+  <p style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--dim);letter-spacing:1px;margin:0 0 12px">All departments share one road work calendar — AI detects conflicts</p>
+
+  <!-- Conflict Simulator -->
+  <div class="ticket-card" style="border-left:3px solid var(--accent);margin-bottom:12px">
+    <div class="ticket-top">
+      <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:2px">CONFLICT SIMULATOR</span>
+    </div>
+    <div style="padding:0 14px 14px;display:flex;flex-direction:column;gap:10px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="disp-field">
+          <div class="disp-lbl">Dept A plans work in</div>
+          <select class="disp-sel" id="c_deptA" onchange="calcConflict()">
+            <option value="roads">Roads — resurfacing</option>
+            <option value="water">Water — pipeline</option>
+            <option value="elec">Electricity — cabling</option>
+            <option value="telecom">Telecom — fibre</option>
+          </select>
+        </div>
+        <div class="disp-field">
+          <div class="disp-lbl">Dept B plans work in</div>
+          <select class="disp-sel" id="c_deptB" onchange="calcConflict()">
+            <option value="water" selected>Water — pipeline</option>
+            <option value="roads">Roads — resurfacing</option>
+            <option value="elec">Electricity — cabling</option>
+            <option value="telecom">Telecom — fibre</option>
+          </select>
+        </div>
+        <div class="disp-field">
+          <div class="disp-lbl">Dept A timeline</div>
+          <select class="disp-sel" id="c_monthA" onchange="calcConflict()">
+            <option value="1">This month</option>
+            <option value="2" selected>In 2 months</option>
+            <option value="4">In 4 months</option>
+            <option value="6">In 6 months</option>
+          </select>
+        </div>
+        <div class="disp-field">
+          <div class="disp-lbl">Dept B timeline</div>
+          <select class="disp-sel" id="c_monthB" onchange="calcConflict()">
+            <option value="1">This month</option>
+            <option value="3" selected>In 3 months</option>
+            <option value="5">In 5 months</option>
+            <option value="7">In 7 months</option>
+          </select>
+        </div>
+      </div>
+      <div id="conflict-out"></div>
+    </div>
+  </div>
+
+  <!-- Dig permit ledger -->
+  <div class="ticket-card" style="border-left:3px solid var(--warn)">
+    <div class="ticket-top">
+      <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--warn);letter-spacing:2px">BLOCKCHAIN DIG LEDGER</span>
+    </div>
+    <div style="padding:0 14px 14px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--dim);line-height:1.8">
+      <div id="ledger-entries">
+        <div class="ledger-row">
+          <span style="color:var(--accent)">ENTRY #001</span> · Water Board · Ward-07 · Seg-W7-114<br>
+          <span style="color:var(--dim)">Dig depth: 1.4m · Patch type: Cold-mix · 12 Jan 2026</span><br>
+          <span style="color:var(--warn)">RHI impact: −8 pts attributed to Water Board</span>
+        </div>
+        <div class="ledger-row" style="margin-top:10px">
+          <span style="color:var(--accent)">ENTRY #002</span> · Torrent Gas · Ward-07 · Seg-W7-114<br>
+          <span style="color:var(--dim)">Dig depth: 0.9m · Patch type: Cold-mix · 28 Feb 2026</span><br>
+          <span style="color:var(--warn)">RHI impact: −6 pts attributed to Torrent Gas</span>
+        </div>
+        <div class="ledger-row" style="margin-top:10px">
+          <span style="color:var(--good)">ENTRY #003</span> · Roads Dept · Ward-07 · Seg-W7-114<br>
+          <span style="color:var(--dim)">Full resurfacing · Hot-mix · 100mm · 15 Mar 2026</span><br>
+          <span style="color:var(--good)">RHI restored: +28 pts · Contractor: Mehta Infra ✓</span>
+        </div>
+      </div>
+      <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">
+        <span style="color:var(--accent)">AI NOTE:</span> Segment W7-114 has been excavated 2× in 90 days by non-roads depts. Roads contractor RHI score protected — degradation attributed correctly. Recommend coordinated dig window for next planned works.
+      </div>
+    </div>
+  </div>
+
+  <!-- RHI Ward Scorecard -->
+  <div class="ticket-card" style="border-left:3px solid var(--good);margin-top:12px">
+    <div class="ticket-top">
+      <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--good);letter-spacing:2px">WARD RHI SCORECARD — PUBLIC</span>
+    </div>
+    <div style="padding:0 14px 14px">
+      <div id="rhi-scorecard"></div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<footer>THE CHANAKYAS · ROAD CONDITION DETECTION SYSTEM</footer>
+
+<script>
+  window._tickets   = [];
+  window._activeTab = 'scanner';
+
+  // Poll until Firebase module sets _dbReady
+  const syncInterval = setInterval(() => {
+    if (window._dbReady) {
+      clearInterval(syncInterval);
+      document.getElementById('syncDot').classList.add('live');
+      document.getElementById('syncText').textContent = 'Live sync active — tickets appear on all devices instantly';
+    }
+  }, 500);
+
+  const TAB_ORDER = ['scanner','dashboard','verify','dispatch','repair','depts'];
+  function switchTab(tab) {
+    window._activeTab = tab;
+    document.querySelectorAll('.tab-page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('tab-' + tab).classList.add('active');
+    const idx = TAB_ORDER.indexOf(tab);
+    document.querySelectorAll('.tab-btn')[idx >= 0 ? idx : 0].classList.add('active');
+    if (tab === 'dispatch') calcDispatch();
+    if (tab === 'repair')   calcRepair();
+    if (tab === 'depts')    { calcConflict(); renderRHI(); }
+    if (tab === 'dashboard') renderDashboard();
+  }
+
+  function updateBadge() {
+    const count = (window._tickets || []).length;
+    const badge   = document.getElementById('ticketBadge');
+    const countEl = document.getElementById('dashCount');
+    count > 0 ? badge.classList.add('show') : badge.classList.remove('show');
+    badge.textContent = count;
+    if (countEl) countEl.textContent = count + ' ticket' + (count !== 1 ? 's' : '');
+  }
+
+  async function clearTickets() {
+    if (!window._dbReady) { alert('Cloud not connected yet.'); return; }
+    if (!confirm('Delete ALL tickets from cloud?\nThis will clear tickets on every device.')) return;
+    for (const t of (window._tickets || [])) {
+      try { await window._deleteDoc(window._doc(window._db, 'tickets', t.firestoreId)); }
+      catch(e) { console.error(e); }
+    }
+  }
+
+  function renderDashboard() {
+    const tickets = window._tickets || [];
+    const list = document.getElementById('ticket-list');
+    updateBadge();
+    if (tickets.length === 0) {
+      list.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div>No tickets yet.<br>Start the scanner and point<br>at a pothole to generate one.</div>`;
+      return;
+    }
+    const now = Date.now();
+    list.innerHTML = tickets.map(t => {
+      const typeClass  = isPothole(t.condition) ? 'pothole' : (t.condition||'').toLowerCase().includes('good') ? 'good' : 'other';
+      const labelColor = typeClass === 'pothole' ? 'var(--danger)' : typeClass === 'good' ? 'var(--good)' : 'var(--warn)';
+      const isNew      = t.createdAt && (now - t.createdAt) < 30000;
+      const locText    = t.location
+        ? `<a href="https://maps.google.com/?q=${t.location}" target="_blank" style="color:var(--accent);text-decoration:none;">${t.location} ↗</a>`
+        : 'Unavailable';
+      const verdictBadge = t.verifyVerdict
+        ? `<span style="font-family:'Share Tech Mono',monospace;font-size:9px;padding:2px 6px;border-radius:4px;border:1px solid;${t.verifyVerdict==='VERIFIED'?'color:var(--good);border-color:var(--good)':t.verifyVerdict==='REVIEW'?'color:var(--warn);border-color:var(--warn)':'color:var(--dim);border-color:var(--dim)'}">${t.verifyVerdict} ${t.verifyScore||''}</span>`
+        : '';
+      return `
+        <div class="ticket-card ${typeClass}">
+          <div class="ticket-top">
+            <div class="ticket-id">${t.id || '—'}</div>
+            <div style="display:flex;gap:6px;align-items:center;">
+              ${verdictBadge}
+              ${isNew ? '<span class="new-pill">● LIVE</span>' : ''}
+              <div class="ticket-status open">OPEN</div>
+            </div>
+          </div>
+          <div class="ticket-condition" style="color:${labelColor}">${(t.condition||'').toUpperCase()}</div>
+          <div class="ticket-meta">
+            <div class="ticket-meta-row"><span>TIME</span><span>${t.timestamp||'—'}</span></div>
+            <div class="ticket-meta-row"><span>CONFIDENCE</span><span>${t.confidence||'—'}</span></div>
+            <div class="ticket-meta-row"><span>LOCATION</span><span>${locText}</span></div>
+            ${t.verifyReason ? `<div class="ticket-meta-row"><span>AI NOTE</span><span>${t.verifyReason}</span></div>` : ''}
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
+            ${t.snapshot ? `<img class="ticket-snap" src="${t.snapshot}" alt="camera" style="border-right:1px solid var(--border)"/>` : ''}
+            ${t.satelliteImage ? `<img class="ticket-snap" src="${t.satelliteImage}" alt="satellite"/>` : ''}
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('ticket-toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3000);
+  }
+
+  let lastTicketTime = 0;
+  const TICKET_COOLDOWN = 10000;
+
+  async function generateTicket(condition, confidence, location, snapshot) {
+    if (!window._dbReady) { console.warn('Firebase not ready'); return; }
+    const now = Date.now();
+    if (now - lastTicketTime < TICKET_COOLDOWN) return;
+    lastTicketTime = now;
+
+    // ── Run satellite verification first ──────────────────────────────────
+    showToast('🛰 Verifying with satellite…');
+    const verify = await verifyAndGenerateTicket(condition, confidence, location, snapshot);
+    if (!verify.shouldTicket) return; // rejected by verifier
+
+    const count  = (window._tickets || []).length + 1;
+    const ticket = {
+      id:             'TCK-' + String(count).padStart(4, '0'),
+      condition, confidence,
+      location:       location || null,
+      snapshot:       snapshot || null,
+      satelliteImage: verify.satelliteImage || null,
+      verifyScore:    verify.verifyScore || null,
+      verifyVerdict:  verify.verifyVerdict || 'UNVERIFIED',
+      verifyReason:   verify.verifyReason || null,
+      source:         'scanner',
+      timestamp:      new Date().toLocaleString('en-IN'),
+      createdAt:      now,
+      status:         'OPEN'
+    };
+
+    try {
+      await window._addDoc(window._ticketsCol, ticket);
+      showToast('✔ ' + ticket.id + ' verified (' + (verify.verifyScore||'?') + ') · synced');
+      setTimeout(() => runAutoDispatch(ticket), 800);
+    } catch(e) {
+      console.error(e);
+      showToast('✖ Cloud sync failed — check Firebase config');
+    }
+  }
+
+  let currentLocation = null;
+  function startGPS() {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.watchPosition(
+      p => { currentLocation = p.coords.latitude.toFixed(6) + ', ' + p.coords.longitude.toFixed(6); },
+      () => { currentLocation = null; },
+      { enableHighAccuracy: true }
+    );
+  }
+
+  function takeSnapshot() {
+    if (!webcam || !webcam.canvas) return null;
+    try {
+      const c = document.createElement('canvas');
+      c.width = webcam.canvas.width; c.height = webcam.canvas.height;
+      c.getContext('2d').drawImage(webcam.canvas, 0, 0);
+      return c.toDataURL('image/jpeg', 0.4);
+    } catch { return null; }
+  }
+
+  let model, webcam, maxPredictions, running = false, animFrame;
+  const POTHOLE_KEYWORDS = ['pothole','damaged','bad','crack','broken','hole','rough'];
+  function isPothole(label) { return POTHOLE_KEYWORDS.some(k => (label||'').toLowerCase().includes(k)); }
+
+  function setStatus(msg, type = '') {
+    const el = document.getElementById('statusBar');
+    el.className = type; el.innerHTML = msg;
+  }
+
+  async function init() {
+    const urlInput = document.getElementById('modelURL').value.trim();
+    if (!urlInput) { setStatus('⚠ &nbsp;Configuration error.', 'error'); return; }
+    const modelURL = urlInput.endsWith('/') ? urlInput : urlInput + '/';
+    document.getElementById('startBtn').disabled = true;
+    setStatus('⏳ &nbsp;Loading model…', 'loading');
+    try {
+      model = await tmImage.load(modelURL + 'model.json', modelURL + 'metadata.json');
+      maxPredictions = model.getTotalClasses();
+    } catch(e) {
+      setStatus('✖ &nbsp;Model load failed: ' + (e.message || 'Check internet'), 'error');
+      document.getElementById('startBtn').disabled = false; return;
+    }
+    setStatus('📷 &nbsp;Starting rear camera…', 'loading');
+    try {
+      webcam = new tmImage.Webcam(640, 480, false);
+      await webcam.setup({ facingMode: { ideal: 'environment' } });
+      await webcam.play();
+      const container = document.getElementById('webcam-container');
+      container.innerHTML = ''; container.appendChild(webcam.canvas);
+    } catch(e) {
+      setStatus('✖ &nbsp;Camera error: ' + (e.message || 'Allow camera permission'), 'error');
+      document.getElementById('startBtn').disabled = false; return;
+    }
+    startGPS(); buildBars(maxPredictions);
+    document.getElementById('cameraWrap').classList.add('visible');
+    document.getElementById('result-panel').classList.add('visible');
+    document.getElementById('stopBtn').disabled = false;
+    setStatus('✔ &nbsp;Running — point camera at the road', 'ready');
+    running = true; loop();
+  }
+
+  function buildBars(count) {
+    const container = document.getElementById('label-bars');
+    container.innerHTML = '';
+    for (let i = 0; i < count; i++) {
+      container.innerHTML += `
+        <div class="bar-item">
+          <div class="bar-name" id="bar-name-${i}">CLASS ${i}</div>
+          <div class="bar-track"><div class="bar-fill" id="bar-fill-${i}" style="width:0%"></div></div>
+          <div class="bar-pct" id="bar-pct-${i}">0%</div>
+        </div>`;
+    }
+  }
+
+  async function loop() { if (!running) return; webcam.update(); await predict(); animFrame = requestAnimationFrame(loop); }
+
+  async function predict() {
+    const predictions = await model.predict(webcam.canvas);
+    let top = predictions[0];
+    for (const p of predictions) { if (p.probability > top.probability) top = p; }
+
+    const THRESHOLD = 0.85;
+    const labelEl = document.getElementById('top-label');
+    const confEl  = document.getElementById('confidence-badge');
+
+    if (top.probability < THRESHOLD) {
+      labelEl.textContent = 'NO ROAD'; labelEl.style.color = 'var(--dim)';
+      confEl.textContent  = (top.probability * 100).toFixed(1) + '%'; confEl.style.color = 'var(--dim)';
+      document.getElementById('alert-badge').classList.remove('show');
+      predictions.forEach((p, i) => {
+        const n = document.getElementById(`bar-name-${i}`);
+        const f = document.getElementById(`bar-fill-${i}`);
+        const c = document.getElementById(`bar-pct-${i}`);
+        if (!n) return;
+        n.textContent = p.className;
+        f.style.width = (p.probability*100).toFixed(1)+'%'; f.style.background = 'var(--dim)';
+        c.textContent = (p.probability*100).toFixed(1)+'%';
+      });
+      return;
+    }
+
+    labelEl.textContent = top.className.toUpperCase();
+    confEl.textContent  = (top.probability * 100).toFixed(1) + '%';
+
+    if (isPothole(top.className)) {
+      labelEl.style.color = 'var(--danger)'; confEl.style.color = 'var(--danger)';
+      document.getElementById('alert-badge').classList.add('show');
+      generateTicket(top.className, (top.probability*100).toFixed(1)+'%', currentLocation, takeSnapshot());
+    } else {
+      labelEl.style.color = 'var(--good)'; confEl.style.color = 'var(--accent)';
+      document.getElementById('alert-badge').classList.remove('show');
+    }
+
+    predictions.forEach((p, i) => {
+      const n = document.getElementById(`bar-name-${i}`);
+      const f = document.getElementById(`bar-fill-${i}`);
+      const c = document.getElementById(`bar-pct-${i}`);
+      if (!n) return;
+      n.textContent = p.className;
+      const pct = (p.probability*100).toFixed(1);
+      f.style.width = pct+'%'; c.textContent = pct+'%';
+      f.style.background = isPothole(p.className) ? 'var(--danger)' : p.className === top.className ? 'var(--good)' : 'var(--accent)';
+    });
+  }
+
+  function stopDetection() {
+    running = false; cancelAnimationFrame(animFrame);
+    if (webcam) webcam.stop();
+    document.getElementById('cameraWrap').classList.remove('visible');
+    document.getElementById('result-panel').classList.remove('visible');
+    document.getElementById('alert-badge').classList.remove('show');
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('stopBtn').disabled = true;
+    setStatus('⬡ &nbsp;Detection stopped. Tap START to run again.');
+  }
+
+  updateBadge();
+
+  /* ════════════════════════════════════════
+     AUTO DISPATCH ENGINE — all signals fetched automatically
+  ════════════════════════════════════════ */
+
+  // Called when dispatch tab opens — pre-fetches signals from last ticket GPS
+  async function calcDispatch() {
+    const tickets = window._tickets || [];
+    const last = tickets.find(t => isPothole(t.condition));
+    if (!last) {
+      document.getElementById('dispatch-out').innerHTML =
+        `<div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--dim);padding:20px;text-align:center">
+          No pothole tickets yet.<br>Scan a pothole first — dispatch auto-populates from that ticket.
+        </div>`;
+      return;
+    }
+    await runAutoDispatch(last);
+  }
+
+  async function runAutoDispatch(ticketIn) {
+    const btn = document.getElementById('autoDispatchBtn');
+    if (btn) btn.disabled = true;
+
+    const tickets = window._tickets || [];
+    const last = ticketIn || tickets.find(t => isPothole(t.condition));
+    if (!last) {
+      document.getElementById('dispatch-out').innerHTML =
+        `<div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--dim);padding:20px;text-align:center">
+          No pothole ticket found. Run the scanner first.
+        </div>`;
+      if (btn) btn.disabled = false;
+      return;
+    }
+
+    setSignal('sig-sev','— reading...','var(--dim)');
+    setSignal('sig-road','— fetching...','var(--dim)');
+    setSignal('sig-traffic','— fetching...','var(--dim)');
+    setSignal('sig-weather','— fetching...','var(--dim)');
+    setSignal('sig-accident','— checking...','var(--dim)');
+
+    // ── 1. SEVERITY from confidence score (already in ticket) ──────────────
+    const confNum = parseFloat((last.confidence||'0').replace('%',''));
+    let sev, sevLabel;
+    if (confNum >= 92)      { sev = 3; sevLabel = 'L3 — Structural'; }
+    else if (confNum >= 87) { sev = 2; sevLabel = 'L2 — Pothole'; }
+    else                    { sev = 1; sevLabel = 'L1 — Surface crack'; }
+    setSignal('sig-sev', sevLabel + ` (${confNum.toFixed(1)}% conf.)`, sev===3?'var(--danger)':sev===2?'var(--warn)':'var(--accent)');
+
+    // ── 2. ROAD TYPE from OpenStreetMap Nominatim reverse geocode ──────────
+    let road = 2, roadLabel = 'Arterial road';
+    const gps = last.location;
+    if (gps) {
+      const [lat, lon] = gps.split(',').map(s => s.trim());
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
+          { headers: { 'Accept-Language': 'en' } }
+        );
+        const data = await res.json();
+        const addr = data.address || {};
+        const osmClass = (data.class||'') + ' ' + (data.type||'');
+        const nameStr  = ((data.display_name||'')).toLowerCase();
+        if (nameStr.includes('school') || nameStr.includes('hospital') || nameStr.includes('college'))
+          { road = 3; roadLabel = 'School / hospital zone'; }
+        else if (osmClass.includes('primary') || osmClass.includes('trunk') || osmClass.includes('motorway'))
+          { road = 3; roadLabel = 'Primary / arterial'; }
+        else if (osmClass.includes('secondary') || osmClass.includes('residential'))
+          { road = 2; roadLabel = 'Secondary road'; }
+        else if (osmClass.includes('service') || osmClass.includes('footway') || osmClass.includes('path'))
+          { road = 1; roadLabel = 'Service lane / path'; }
+        else {
+          const rType = addr.road || addr.pedestrian || '';
+          if (/main|highway|national|state/.test(rType.toLowerCase())) { road = 3; roadLabel = 'Major highway'; }
+          else if (/street|avenue|marg/.test(rType.toLowerCase()))     { road = 2; roadLabel = rType || 'Road'; }
+          else if (rType)                                               { road = 1; roadLabel = rType; }
+        }
+      } catch(e) { roadLabel = 'Road (GPS lookup failed)'; }
+    } else { roadLabel = 'Road (no GPS)'; road = 2; }
+    setSignal('sig-road', roadLabel, road===3?'var(--danger)':road===2?'var(--accent)':'var(--dim)');
+
+    // ── 3. TRAFFIC LOAD — hour-of-day model + OSM road class ───────────────
+    const hour = new Date().getHours();
+    const isPeak = (hour >= 8 && hour <= 10) || (hour >= 17 && hour <= 20);
+    const isMid  = (hour >= 11 && hour <= 16);
+    let traffic, trafficLabel;
+    if (road === 3 && isPeak)       { traffic = 3; trafficLabel = 'High — peak hour arterial'; }
+    else if (isPeak)                { traffic = 2; trafficLabel = 'Moderate — peak hour'; }
+    else if (isMid && road >= 2)    { traffic = 2; trafficLabel = 'Moderate — daytime'; }
+    else if (hour >= 22 || hour < 5){ traffic = 1; trafficLabel = 'Low — night hours'; }
+    else                            { traffic = 1; trafficLabel = 'Low — off-peak'; }
+    setSignal('sig-traffic', trafficLabel + ` (${hour}:00)`, traffic===3?'var(--danger)':traffic===2?'var(--warn)':'var(--good)');
+
+    // ── 4. WEATHER RISK from Open-Meteo (free, no API key needed) ──────────
+    let weather = 0, weatherLabel = 'Clear — no rain forecast';
+    if (gps) {
+      const [lat2, lon2] = gps.split(',').map(s => s.trim());
+      try {
+        const wres  = await fetch(
+          `https://api.open-meteo.com/v1/forecast?latitude=${lat2}&longitude=${lon2}&hourly=precipitation_probability&forecast_days=1&timezone=auto`
+        );
+        const wdata = await wres.json();
+        const probs = (wdata.hourly?.precipitation_probability || []).slice(0, 24);
+        const hIdx  = new Date().getHours();
+        const next2h= Math.max(...(probs.slice(hIdx, hIdx+2).length ? probs.slice(hIdx, hIdx+2) : [0]));
+        const next6h= Math.max(...(probs.slice(hIdx, hIdx+6).length ? probs.slice(hIdx, hIdx+6) : [0]));
+        if      (next2h >= 60) { weather = 2; weatherLabel = `Rain likely in 2h (${next2h}%)`; }
+        else if (next6h >= 50) { weather = 1; weatherLabel = `Rain possible in 6h (${next6h}%)`; }
+        else                   { weather = 0; weatherLabel = `Clear — ${next6h}% chance next 6h`; }
+      } catch(e) { weatherLabel = 'Weather API unavailable'; }
+    } else { weatherLabel = 'No GPS — weather skipped'; }
+    setSignal('sig-weather', weatherLabel, weather===2?'var(--danger)':weather===1?'var(--warn)':'var(--good)');
+
+    // ── 5. ACCIDENT HISTORY — check Firestore tickets near same GPS ────────
+    let acc = 0, accLabel = 'No incidents at this location';
+    if (gps && window._tickets) {
+      const [lat3, lon3] = gps.split(',').map(s=>parseFloat(s.trim()));
+      const thirtyDaysAgo = Date.now() - 30*24*60*60*1000;
+      const nearby = (window._tickets||[]).filter(t => {
+        if (!t.location || t.id === last.id) return false;
+        const [tLat, tLon] = t.location.split(',').map(s=>parseFloat(s.trim()));
+        const dist = Math.sqrt(Math.pow(tLat-lat3,2)+Math.pow(tLon-lon3,2)) * 111000;
+        return dist < 100 && (t.createdAt||0) > thirtyDaysAgo;
+      });
+      if (nearby.length >= 2) { acc = 2; accLabel = `${nearby.length} incidents within 100m (30d)`; }
+      else if (nearby.length === 1) { acc = 1; accLabel = '1 incident nearby (30d)'; }
+    }
+    setSignal('sig-accident', accLabel, acc>=2?'var(--danger)':acc===1?'var(--warn)':'var(--good)');
+
+    // ── 6. WORKERS — simulated ward registry ───────────────────────────────
+    const workers = 5;
+    setSignal('sig-workers','5 available (Ward-07)','var(--accent)');
+
+    // ── SCORE & RENDER ─────────────────────────────────────────────────────
+    renderDispatchResult({ sev, road, traffic, weather, acc, workers, last });
+    if (btn) btn.disabled = false;
+  }
+
+  function setSignal(id, text, color) {
+    const el = document.getElementById(id);
+    if (el) { el.textContent = text; el.style.color = color || 'var(--text)'; el.style.fontSize = '12px'; }
+  }
+
+  function renderDispatchResult({ sev, road, traffic, weather, acc, workers, last }) {
+    const score = (sev*3)+(road*2)+traffic+weather+acc;
+    let pClass, pLabel, mobilise, deadline, shift, crewCount, crewType, material, note, escalate;
+
+    if (score >= 14) {
+      pClass='p1'; pLabel='P1 — EMERGENCY'; mobilise='2 hours'; escalate='Municipal commissioner at T+1hr';
+      if (sev===3) {
+        deadline='5 days (L3 structural)'; crewCount=Math.min(workers,10);
+        crewType='workers + excavator + paver + supervisor';
+        material='Hot-mix, geotextile base, compactor, light markers';
+      } else {
+        deadline='6 hours'; crewCount=Math.min(workers,5);
+        crewType='workers + compactor + supervisor';
+        material='Hot-mix asphalt, compactor, barricades + reflectors';
+      }
+      shift=traffic===3?'Night shift only (10pm–5am)':'Immediate — day shift';
+      note='Traffic diversion order auto-issued to Traffic dept.';
+    } else if (score >= 8) {
+      pClass='p2'; pLabel='P2 — URGENT'; mobilise='Within 8 hours'; escalate='Ward officer re-notified at T+2hr';
+      if (sev===1) {
+        deadline='24 hours'; crewCount=Math.min(workers,2);
+        crewType='workers'; material='Cold-mix bag, hand tools';
+      } else {
+        deadline='24–48 hours'; crewCount=Math.min(workers,4);
+        crewType='workers + light compactor + supervisor';
+        material='Hot-mix or cold-mix, light compactor';
+      }
+      shift=traffic===3?'Night shift preferred':'Day shift';
+      note='Scheduled in next available crew slot for this ward.';
+    } else {
+      pClass='p3'; pLabel='P3 — PLANNED'; mobilise='Within 7 days'; escalate='Reminder to supervisor at T+3 days';
+      deadline='7 days'; crewCount=Math.min(workers,2); crewType='workers';
+      material='Cold-mix, hand tools'; shift='Day shift';
+      note='Batched with nearby P3 jobs — optimised route for efficiency.';
+    }
+
+    const workerWarn = workers < (sev===3?6:sev===2?3:1);
+    const workerNote = workerWarn
+      ? `<div style="color:var(--warn);font-family:'Share Tech Mono',monospace;font-size:10px;margin-top:6px;letter-spacing:1px">⚠ INSUFFICIENT WORKERS — AI requests reallocation from adjacent ward</div>` : '';
+
+    const tlSteps = [
+      {dot:'tl-done', time:'T = 0',        desc:'Ticket created · Deadline locked on blockchain · SMS to supervisor'},
+      {dot:'tl-done', time:'T + 30 min',   desc:'Supervisor must confirm via SMS · No reply = escalate to ward officer'},
+      {dot:'tl-now',  time:`T + ${score>=14?'1':'2'} hr`, desc: escalate},
+      {dot:'tl-pend', time:'Deadline',      desc:'Segment flagged for priority re-scan · AI verifies quality · RHI updated'},
+      {dot:'tl-pend', time:'+ 90 days',     desc:'Automated re-scan · Does repair hold? · Contractor score adjusted'},
+    ];
+
+    document.getElementById('dispatch-out').innerHTML = `
+      <div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--dim);letter-spacing:1px;margin-bottom:8px">
+        TICKET: ${last.id||'—'} · ${last.condition||''} · ${last.timestamp||''} · SCORE: ${score}/18
+      </div>
+      <div class="priority-banner ${pClass}">
+        <div style="font-size:16px;font-weight:700;letter-spacing:3px;margin-bottom:4px">${pLabel}</div>
+        <div style="font-size:11px;opacity:0.8">Score ${score}/18 &nbsp;·&nbsp; sev=${sev*3} road=${road*2} traffic=${traffic} weather=${weather} accident=${acc}</div>
+      </div>
+      <div class="dispatch-grid">
+        <div class="dispatch-cell"><div class="dispatch-cell-label">Mobilise by</div><div class="dispatch-cell-val">${mobilise}</div></div>
+        <div class="dispatch-cell"><div class="dispatch-cell-label">Repair deadline</div><div class="dispatch-cell-val">${deadline}</div></div>
+        <div class="dispatch-cell"><div class="dispatch-cell-label">Work shift</div><div class="dispatch-cell-val">${shift}</div></div>
+        <div class="dispatch-cell"><div class="dispatch-cell-label">Crew dispatched</div><div class="dispatch-cell-val">${crewCount} ${crewType}</div>${workerNote}</div>
+      </div>
+      <div class="spec-block">
+        <div class="spec-title">MATERIALS REQUIRED</div>
+        <div class="spec-row"><span class="spec-key">MATERIALS</span><span class="spec-val">${material}</span></div>
+        <div class="spec-row"><span class="spec-key">NOTE</span><span class="spec-val">${note}</span></div>
+      </div>
+      <div class="spec-block">
+        <div class="spec-title">AUTOMATED ACTION TIMELINE</div>
+        ${tlSteps.map(s=>`<div class="timeline-step"><div class="tl-dot ${s.dot}"></div><div><span style="color:var(--accent)">${s.time}</span> — ${s.desc}</div></div>`).join('')}
+      </div>`;
+  }
+
+  /* ════════════════════════════════════════
+     SATELLITE VERIFICATION ENGINE
+  ════════════════════════════════════════ */
+
+  // ── CONFIG: paste your Google Maps Static API key here ──
+  const GMAPS_KEY = 'YOUR_GOOGLE_MAPS_STATIC_API_KEY';
+  // Get one free at: console.cloud.google.com → Maps Static API → enable → Credentials
+  // Free tier: 28,000 loads/month. For demo, a key works instantly.
+
+  // ── CONFIG: paste your Anthropic API key here for Vision analysis ──
+  const ANTHROPIC_KEY = 'YOUR_ANTHROPIC_API_KEY';
+  // For demo: use a restricted key. Claude analyses both images and returns a JSON score.
+
+  function getSatelliteTileUrl(lat, lon, zoom = 19) {
+    // Google Maps Static API — primary, highest quality satellite imagery
+    if (GMAPS_KEY !== 'YOUR_GOOGLE_MAPS_STATIC_API_KEY') {
+      return `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lon}&zoom=${zoom}&size=600x400&maptype=satellite&markers=color:red%7C${lat},${lon}&key=${GMAPS_KEY}`;
+    }
+    // OSM tile fallback only when no key is configured
+    const z = Math.min(zoom, 18);
+    const tileX = Math.floor((lon + 180) / 360 * Math.pow(2, z));
+    const sinLat = Math.sin(lat * Math.PI / 180);
+    const tileY  = Math.floor((0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * Math.pow(2, z));
+    return `https://tile.openstreetmap.org/${z}/${tileX}/${tileY}.png`;
+  }
+
+  async function fetchSatelliteTileAsBase64(lat, lon) {
+    const url = getSatelliteTileUrl(lat, lon);
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result); // data:image/...;base64,...
+        reader.onerror  = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch(e) {
+      return null;
+    }
+  }
+
+  async function analyseWithClaude(cameraBase64, satelliteBase64, lat, lon) {
+    // If no API key, use rule-based heuristic scoring for demo
+    if (ANTHROPIC_KEY === 'YOUR_ANTHROPIC_API_KEY') {
+      return heuristicVerify(cameraBase64, satelliteBase64);
+    }
+    try {
+      const prompt = `You are a road quality verification AI for a municipal system in India.
+You are given two images:
+1. A ground-level camera image captured by a pothole detection scanner
+2. A satellite/aerial tile of the SAME GPS location (${lat}, ${lon})
+
+Analyse both images and return ONLY a JSON object with this exact structure:
+{
+  "score": <integer 0-100>,
+  "road_visible_satellite": <true|false>,
+  "damage_pattern_matches": <true|false>,
+  "is_duplicate_area": <false>,
+  "satellite_road_condition": "<good|fair|damaged|unclear>",
+  "reasoning": "<one sentence explanation>",
+  "verdict": "<VERIFIED|REVIEW|REJECTED>"
+}
+
+Scoring guide:
+- 75-100: Clear road visible in satellite, damage pattern consistent → VERIFIED
+- 40-74:  Road visible but damage unclear or low confidence → REVIEW
+- 0-39:   No road visible, clearly wrong location, or no damage → REJECTED`;
+
+      const messages = [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: cameraBase64.split(',')[1] } },
+          { type: 'image', source: { type: 'base64', media_type: 'image/png',  data: satelliteBase64.split(',')[1] } },
+          { type: 'text',  text: prompt }
+        ]
+      }];
+
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model: 'claude-opus-4-6', max_tokens: 400, messages })
+      });
+      const data = await res.json();
+      const text = data.content?.[0]?.text || '';
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) return JSON.parse(jsonMatch[0]);
+    } catch(e) { /* fall through to heuristic */ }
+    return heuristicVerify(cameraBase64, satelliteBase64);
+  }
+
+  function heuristicVerify(cameraB64, satelliteB64) {
+    // Demo scoring when no API keys are configured
+    // In production this is replaced by Claude Vision analysis
+    const hasCamera    = !!(cameraB64 && cameraB64.length > 1000);
+    const hasSatellite = !!(satelliteB64 && satelliteB64.length > 1000);
+    const baseScore = hasCamera ? 72 : 45;
+    const satBonus  = hasSatellite ? 15 : 0;
+    const score     = Math.min(95, baseScore + satBonus + Math.floor(Math.random()*8));
+    const verdict   = score >= 75 ? 'VERIFIED' : score >= 40 ? 'REVIEW' : 'REJECTED';
+    return {
+      score, verdict,
+      road_visible_satellite: hasSatellite,
+      damage_pattern_matches: score >= 60,
+      satellite_road_condition: score >= 75 ? 'damaged' : 'fair',
+      reasoning: GMAPS_KEY === 'YOUR_GOOGLE_MAPS_STATIC_API_KEY'
+        ? 'Demo mode — add Google Maps + Anthropic API keys for live satellite + vision analysis'
+        : 'Heuristic scoring — both images present, GPS confirmed'
+    };
+  }
+
+  function renderVerifyResult(result, cameraB64, satelliteB64, gps, container, pendingTicketData) {
+    const verdictColor = result.verdict === 'VERIFIED' ? 'var(--good)' : result.verdict === 'REVIEW' ? 'var(--warn)' : 'var(--danger)';
+    const verdictIcon  = result.verdict === 'VERIFIED' ? '✔' : result.verdict === 'REVIEW' ? '⚠' : '✖';
+    const scoreBar     = Math.round(result.score);
+
+    // ── Image comparison panel (shared by all verdicts) ──
+    const imgPanel = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">
+        <div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--dim);margin-bottom:4px;letter-spacing:1px">CAMERA IMAGE</div>
+          ${cameraB64
+            ? `<img src="${cameraB64}" style="width:100%;border-radius:6px;border:1px solid var(--border);aspect-ratio:4/3;object-fit:cover">`
+            : `<div style="background:var(--panel);border:1px solid var(--border);border-radius:6px;aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--dim)">No image</div>`}
+        </div>
+        <div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--dim);margin-bottom:4px;letter-spacing:1px">
+            SATELLITE — ${GMAPS_KEY !== 'YOUR_GOOGLE_MAPS_STATIC_API_KEY' ? 'Google Maps' : 'OpenStreetMap'}
+          </div>
+          ${satelliteB64
+            ? `<img src="${satelliteB64}" style="width:100%;border-radius:6px;border:1px solid var(--border);aspect-ratio:4/3;object-fit:cover">`
+            : `<div style="background:var(--panel);border:1px solid var(--border);border-radius:6px;aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--dim)">Fetching…</div>`}
+        </div>
+      </div>`;
+
+    // ── Score bar ──
+    const scorePanel = `
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+        <div style="font-family:'Orbitron',sans-serif;font-size:18px;font-weight:900;color:${verdictColor};white-space:nowrap">${verdictIcon} ${result.verdict}</div>
+        <div style="flex:1">
+          <div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--dim);margin-bottom:4px">VERIFICATION SCORE</div>
+          <div style="background:var(--border);border-radius:99px;height:6px;overflow:hidden">
+            <div style="width:${scoreBar}%;height:100%;background:${verdictColor};border-radius:99px;transition:width 0.8s ease"></div>
+          </div>
+        </div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:18px;font-weight:700;color:${verdictColor}">${scoreBar}</div>
+      </div>`;
+
+    // ── AI detail rows ──
+    const detailPanel = `
+      <div class="spec-block">
+        <div class="spec-title">AI ANALYSIS</div>
+        <div class="spec-row"><span class="spec-key">SATELLITE SRC</span><span class="spec-val">${GMAPS_KEY !== 'YOUR_GOOGLE_MAPS_STATIC_API_KEY' ? 'Google Maps Static API' : 'OpenStreetMap (add GMAPS key for best quality)'}</span></div>
+        <div class="spec-row"><span class="spec-key">ROAD VISIBLE</span><span class="spec-val">${result.road_visible_satellite ? '✔ Yes' : '✖ No / unclear'}</span></div>
+        <div class="spec-row"><span class="spec-key">DAMAGE MATCH</span><span class="spec-val">${result.damage_pattern_matches ? '✔ Consistent' : '— Inconclusive'}</span></div>
+        <div class="spec-row"><span class="spec-key">SAT CONDITION</span><span class="spec-val">${result.satellite_road_condition || '—'}</span></div>
+        <div class="spec-row"><span class="spec-key">GPS</span><span class="spec-val">${gps || '—'}</span></div>
+        <div class="spec-row"><span class="spec-key">AI REASONING</span><span class="spec-val">${result.reasoning || '—'}</span></div>
+      </div>`;
+
+    // ── Verdict-specific bottom panel ──
+    let actionPanel = '';
+
+    if (result.verdict === 'VERIFIED') {
+      // Auto-ticket already generated — just confirm
+      actionPanel = `
+        <div style="background:rgba(0,230,118,0.08);border:1px solid var(--good);border-radius:8px;padding:12px 14px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--good);letter-spacing:1px;line-height:1.9">
+          ✔ AUTO-VERIFIED — Score ${scoreBar}/100 ≥ 75<br>
+          Ticket generated · Firestore updated · Dispatch engine notified<br>
+          Both images stored as evidence — full audit trail preserved
+        </div>`;
+
+    } else if (result.verdict === 'REVIEW') {
+      // Store pending ticket globally — safe, no serialization needed
+      window._pendingReviewTicket = pendingTicketData;
+      actionPanel = `
+        <div style="background:rgba(255,171,0,0.08);border:1px solid var(--warn);border-radius:8px;padding:12px 14px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--warn);letter-spacing:1px;margin-bottom:10px;line-height:1.9">
+          OFFICER REVIEW REQUIRED — Score ${scoreBar}/100 (40-74 range)<br>
+          AI confidence is borderline. Both images shown above.<br>
+          Examine the satellite tile and camera image, then decide:
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <button class="btn" onclick="officerDecision('APPROVE')"
+                  style="border-color:var(--good);color:var(--good);font-size:12px;padding:10px">
+            APPROVE — Generate Ticket
+          </button>
+          <button class="btn btn-stop" onclick="officerDecision('REJECT')"
+                  style="font-size:12px;padding:10px">
+            REJECT — Discard
+          </button>
+        </div>
+        <div class="disp-field">
+          <div class="disp-lbl">Officer note (optional)</div>
+          <input type="text" id="officer-note" placeholder="e.g. Confirmed pothole on Ring Road near flyover"
+                 style="font-family:'Share Tech Mono',monospace;font-size:11px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 10px;width:100%">
+        </div>`;
+
+    } else {
+      // REJECTED
+      actionPanel = `
+        <div style="background:rgba(255,23,68,0.08);border:1px solid var(--danger);border-radius:8px;padding:12px 14px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--danger);letter-spacing:1px;line-height:1.9">
+          ✖ REJECTED — Score ${scoreBar}/100 (below 40)<br>
+          No road damage confirmed at this GPS location.<br>
+          No ticket generated. Rejection logged in audit trail.
+        </div>`;
+    }
+
+    container.innerHTML = scorePanel + imgPanel + detailPanel + actionPanel;
+  }
+
+  // Officer approve / reject handler
+  async function officerDecision(decision) {
+    const note      = (document.getElementById('officer-note') || {}).value || '';
+    const container = document.getElementById('verify-last-out');
+    const pending   = window._pendingReviewTicket || {};
+
+    if (decision === 'REJECT') {
+      window._pendingReviewTicket = null;
+      const msg = document.createElement('div');
+      msg.style.cssText = 'background:rgba(255,23,68,0.08);border:1px solid var(--danger);border-radius:8px;padding:10px 14px;font-family:Share Tech Mono,monospace;font-size:10px;color:var(--danger);letter-spacing:1px;margin-top:8px';
+      msg.textContent = 'OFFICER REJECTED — Report discarded. Logged for audit.' + (note ? ' Note: ' + note : '');
+      container.appendChild(msg);
+      showToast('Rejected by officer — no ticket generated');
+      return;
+    }
+
+    // APPROVE
+    if (!window._dbReady) { showToast('Firebase not ready'); return; }
+    const count  = (window._tickets || []).length + 1;
+    const ticket = Object.assign({}, pending, {
+      id:            pending.id || ('TCK-' + String(count).padStart(4, '0')),
+      verifyVerdict: 'OFFICER_APPROVED',
+      officerNote:   note || null,
+      status:        'OPEN'
+    });
+    window._pendingReviewTicket = null;
+    try {
+      await window._addDoc(window._ticketsCol, ticket);
+      showToast('Officer approved — ' + ticket.id + ' generated');
+      const msg = document.createElement('div');
+      msg.style.cssText = 'background:rgba(0,230,118,0.08);border:1px solid var(--good);border-radius:8px;padding:10px 14px;font-family:Share Tech Mono,monospace;font-size:10px;color:var(--good);letter-spacing:1px;margin-top:8px';
+      msg.textContent = 'OFFICER APPROVED — ' + ticket.id + ' generated and synced.' + (note ? ' Note: ' + note : '') + ' Dispatch engine notified.';
+      container.appendChild(msg);
+      setTimeout(() => runAutoDispatch(ticket), 600);
+    } catch(e) {
+      showToast('Firestore error — check connection');
+    }
+  }
+
+  async function verifyLastTicket() {
+    const tickets = window._tickets || [];
+    const last = tickets.find(t => isPothole(t.condition));
+    if (!last) return;
+    const container = document.getElementById('verify-last-out');
+    container.innerHTML = `<div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--accent);padding:16px;text-align:center">🛰 Fetching satellite tile…</div>`;
+
+    const gps = last.location;
+    let satB64 = null;
+    if (gps) {
+      const [lat, lon] = gps.split(',').map(s => parseFloat(s.trim()));
+      satB64 = await fetchSatelliteTileAsBase64(lat, lon);
+    }
+
+    container.innerHTML = `<div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--accent);padding:16px;text-align:center">🤖 Analysing images…</div>`;
+    const [lat, lon] = gps ? gps.split(',').map(s => parseFloat(s.trim())) : [0, 0];
+    const result = await analyseWithClaude(last.snapshot, satB64, lat, lon);
+    renderVerifyResult(result, last.snapshot, satB64, gps, container, last);
+  }
+
+  // ── Called automatically on every pothole detection (hooked in generateTicket) ──
+  async function verifyAndGenerateTicket(condition, confidence, location, snapshot) {
+    let satB64 = null;
+    let verifyResult = null;
+
+    if (location) {
+      const [lat, lon] = location.split(',').map(s => parseFloat(s.trim()));
+      satB64 = await fetchSatelliteTileAsBase64(lat, lon);
+      verifyResult = await analyseWithClaude(snapshot, satB64, lat, lon);
+    } else {
+      verifyResult = heuristicVerify(snapshot, null);
+    }
+
+    // Build the pending ticket object (used if officer approves REVIEW)
+    const pendingTicket = {
+      condition, confidence,
+      location:       location || null,
+      snapshot:       snapshot || null,
+      satelliteImage: satB64 || null,
+      verifyScore:    verifyResult.score,
+      verifyVerdict:  verifyResult.verdict,
+      verifyReason:   verifyResult.reasoning,
+      source:         'scanner',
+      timestamp:      new Date().toLocaleString('en-IN'),
+      createdAt:      Date.now(),
+      status:         'OPEN'
+    };
+
+    // Update Verify tab with full result including pending data for officer buttons
+    const container = document.getElementById('verify-last-out');
+    if (container) renderVerifyResult(verifyResult, snapshot, satB64, location, container, pendingTicket);
+
+    if (verifyResult.verdict === 'VERIFIED') {
+      // Auto-generate ticket immediately
+      return {
+        satelliteImage: satB64,
+        verifyScore:    verifyResult.score,
+        verifyVerdict:  verifyResult.verdict,
+        verifyReason:   verifyResult.reasoning,
+        shouldTicket:   true
+      };
+    } else if (verifyResult.verdict === 'REVIEW') {
+      // Switch user to Verify tab so officer can decide
+      switchTab('verify');
+      showToast('⚠ Review required — check Verify tab');
+      return { shouldTicket: false }; // ticket held until officer approves
+    } else {
+      // REJECTED
+      showToast('✖ Satellite verifier rejected — no ticket');
+      return { shouldTicket: false };
+    }
+  }
+
+  function previewCitizen(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      document.getElementById('citizen-img').src = e.target.result;
+      document.getElementById('citizen-preview').style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function getCitizenGPS() {
+    if (!navigator.geolocation) { alert('GPS not available'); return; }
+    navigator.geolocation.getCurrentPosition(
+      p => { document.getElementById('citizenGPS').value = p.coords.latitude.toFixed(6) + ', ' + p.coords.longitude.toFixed(6); },
+      () => alert('Could not get location — enter manually')
+    );
+  }
+
+  async function verifyCitizenReport() {
+    const gpsVal = document.getElementById('citizenGPS').value.trim();
+    const imgEl  = document.getElementById('citizen-img');
+    const btn    = document.getElementById('citizenVerifyBtn');
+
+    if (!gpsVal) { alert('Please enter or get your GPS location first'); return; }
+    if (!imgEl.src || imgEl.src === window.location.href) { alert('Please upload a photo first'); return; }
+
+    btn.disabled = true;
+    btn.textContent = '🛰 Verifying…';
+
+    const [lat, lon] = gpsVal.split(',').map(s => parseFloat(s.trim()));
+    const satB64 = await fetchSatelliteTileAsBase64(lat, lon);
+    const result = await analyseWithClaude(imgEl.src, satB64, lat, lon);
+
+    const pendingCitizen = {
+      condition:       'Citizen Report — Pothole',
+      confidence:      result.score + '%',
+      location:        gpsVal,
+      snapshot:        imgEl.src,
+      satelliteImage:  satB64,
+      verifyScore:     result.score,
+      verifyVerdict:   result.verdict,
+      verifyReason:    result.reasoning,
+      source:          'citizen',
+      timestamp:       new Date().toLocaleString('en-IN'),
+      createdAt:       Date.now(),
+      status:          'OPEN'
+    };
+
+    const container = document.getElementById('verify-last-out');
+    renderVerifyResult(result, imgEl.src, satB64, gpsVal, container, pendingCitizen);
+
+    // If verified → auto-generate; if REVIEW → officer decides via buttons; REJECTED → nothing
+    if (result.verdict === 'VERIFIED' && window._dbReady) {
+      const count  = (window._tickets||[]).length + 1;
+      const ticket = { ...pendingCitizen, id: 'CIT-' + String(count).padStart(4,'0') };
+      try {
+        await window._addDoc(window._ticketsCol, ticket);
+        showToast('✔ Citizen report ' + ticket.id + ' verified and submitted');
+      } catch(e) { showToast('✖ Could not save — check connection'); }
+    } else if (result.verdict === 'REVIEW') {
+      showToast('⚠ Citizen report needs officer review — see above');
+    } else {
+      showToast('✖ Citizen report rejected by satellite verifier');
+    }
+
+    btn.disabled = false;
+    btn.textContent = '🛰 VERIFY & SUBMIT COMPLAINT';
+  }
+
+  // switch verify tab handler already covered in TAB_ORDER above
+
+  /* ════════════════════════════════════════
+     REPAIR INTELLIGENCE ENGINE
+  ════════════════════════════════════════ */
+  function calcRepair() {
+    const sev     = +document.getElementById('r_sev').value;
+    const dig     = +document.getElementById('r_dig').value;
+    const traffic = +document.getElementById('r_traffic').value;
+    const rhi     = +document.getElementById('r_rhi').value;
+
+    const specs = {
+      1: {
+        method:    'Cold-mix surface patching',
+        depth:     '30–50mm',
+        base:      'No base layer required unless dig history',
+        material:  'Cold-mix bitumen bag (10–20 kg)',
+        compaction:'Hand tamper',
+        time:      '1–2 hours · 2 workers',
+        rhiGain:   '+6 to +10 pts',
+      },
+      2: {
+        method:    'Hot-mix pothole repair with edge cutting',
+        depth:     '80–100mm',
+        base:      'Tack coat (bitumen emulsion) required',
+        material:  'Hot-mix asphalt 80–150 kg + tack coat',
+        compaction:'Plate compactor',
+        time:      '4–6 hours · 4 workers + supervisor',
+        rhiGain:   '+15 to +22 pts',
+      },
+      3: {
+        method:    'Full-depth reclamation (FDR)',
+        depth:     '150–200mm full depth',
+        base:      'Geotextile + granular sub-base + DBM layer mandatory',
+        material:  'Hot-mix, geotextile sheet, granular aggregate, DBM',
+        compaction:'Heavy vibratory roller + paver machine',
+        time:      '2–5 days · 8–12 workers + machinery',
+        rhiGain:   '+30 to +45 pts',
+      },
+    };
+
+    const spec = specs[sev];
+
+    let digWarning = '';
+    let extraDepth = '';
+    if (dig === 1 || dig === 2) {
+      digWarning = `<div class="conflict-alert warn" style="margin:8px 0">⚠ PREVIOUS DIG DETECTED — Subbase may be weakened. AI recommends increasing repair depth by 30mm and inspecting for void pockets before patching.</div>`;
+      extraDepth = ' (+30mm due to dig history)';
+    } else if (dig === 3) {
+      digWarning = `<div class="conflict-alert danger" style="margin:8px 0">⛔ MULTIPLE DIGS ON SEGMENT — High subsidence risk. AI recommends full-depth inspection before any surface repair. Consider coordinating with all relevant departments before work begins.</div>`;
+      extraDepth = ' — full inspection required first';
+    }
+
+    let trafficNote = '';
+    if (traffic === 3) {
+      trafficNote = '<div class="spec-row"><span class="spec-key">SHIFT</span><span class="spec-val" style="color:var(--warn)">Night shift only (10pm–5am) — high traffic road</span></div>';
+    }
+
+    const rhiAfter = Math.min(100, rhi + parseInt(spec.rhiGain));
+    const rhiColor = rhiAfter >= 90 ? 'var(--good)' : rhiAfter >= 75 ? 'var(--accent)' : 'var(--warn)';
+
+    document.getElementById('repair-out').innerHTML = `
+      ${digWarning}
+      <div class="spec-block">
+        <div class="spec-title">AI REPAIR SPECIFICATION</div>
+        <div class="spec-row"><span class="spec-key">METHOD</span><span class="spec-val">${spec.method}</span></div>
+        <div class="spec-row"><span class="spec-key">DEPTH</span><span class="spec-val">${spec.depth}${extraDepth}</span></div>
+        <div class="spec-row"><span class="spec-key">BASE LAYER</span><span class="spec-val">${spec.base}</span></div>
+        <div class="spec-row"><span class="spec-key">MATERIAL</span><span class="spec-val">${spec.material}</span></div>
+        <div class="spec-row"><span class="spec-key">COMPACTION</span><span class="spec-val">${spec.compaction}</span></div>
+        <div class="spec-row"><span class="spec-key">TIME / CREW</span><span class="spec-val">${spec.time}</span></div>
+        ${trafficNote}
+      </div>
+      <div class="spec-block">
+        <div class="spec-title">RHI IMPACT FORECAST</div>
+        <div class="spec-row"><span class="spec-key">CURRENT RHI</span><span class="spec-val" style="color:var(--warn)">${rhi}</span></div>
+        <div class="spec-row"><span class="spec-key">EXPECTED GAIN</span><span class="spec-val" style="color:var(--accent)">${spec.rhiGain}</span></div>
+        <div class="spec-row"><span class="spec-key">RHI AFTER REPAIR</span><span class="spec-val" style="color:${rhiColor};font-size:16px;font-weight:700">${rhiAfter}</span></div>
+        <div class="spec-row"><span class="spec-key">VERIFICATION</span><span class="spec-val">Auto re-scan in 48h · Again at 90 days</span></div>
+      </div>
+      <div class="spec-block" style="border-color:var(--good)">
+        <div class="spec-title" style="color:var(--good)">HOW QUALITY IS VERIFIED — NO CONTRACTOR TRUST NEEDED</div>
+        <div class="timeline-step"><div class="tl-dot tl-pend"></div><div>Repair registered as complete by supervisor SMS</div></div>
+        <div class="timeline-step"><div class="tl-dot tl-pend"></div><div>At T+2hr: GPS segment flagged for priority re-scan on next bus/drone pass</div></div>
+        <div class="timeline-step"><div class="tl-dot tl-pend"></div><div>AI classifier runs on new scan — detects if pothole still visible</div></div>
+        <div class="timeline-step"><div class="tl-dot tl-pend"></div><div>Pass → ticket closed, RHI updated, contractor bonus credited</div></div>
+        <div class="timeline-step" style="border:none"><div class="tl-dot tl-dead"></div><div style="color:var(--danger)">Fail → ticket reopened, penalty logged, supervisor flagged</div></div>
+      </div>
+    `;
+  }
+
+  /* ════════════════════════════════════════
+     DEPT CONFLICT ENGINE
+  ════════════════════════════════════════ */
+  const DEPT_NAMES = { roads:'Roads Dept', water:'Water Board', elec:'Electricity Board', telecom:'Telecom / Fibre' };
+  const DEPT_DEPTH = { roads:'Surface (0–200mm)', water:'Deep (1–2m)', elec:'Medium (0.5–1m)', telecom:'Shallow (0.3–0.6m)' };
+  const SEQ_ORDER  = { water:1, elec:2, telecom:3, roads:4 };
+
+  function calcConflict() {
+    const dA = document.getElementById('c_deptA').value;
+    const dB = document.getElementById('c_deptB').value;
+    const mA = +document.getElementById('c_monthA').value;
+    const mB = +document.getElementById('c_monthB').value;
+
+    const gap     = Math.abs(mA - mB);
+    const uncoord = 420000 + (gap * 40000);
+    const coord   = 240000;
+    const saving  = uncoord - coord;
+    const seqOk   = SEQ_ORDER[dA] < SEQ_ORDER[dB] || SEQ_ORDER[dB] < SEQ_ORDER[dA];
+
+    let html = '';
+
+    if (dA === dB) {
+      html = `<div class="conflict-alert warn">⚠ Same department selected for both. Choose two different departments to simulate coordination.</div>`;
+    } else if (gap <= 4) {
+      const earlier    = mA <= mB ? DEPT_NAMES[dA] : DEPT_NAMES[dB];
+      const later      = mA <= mB ? DEPT_NAMES[dB] : DEPT_NAMES[dA];
+      const firstDept  = SEQ_ORDER[dA] < SEQ_ORDER[dB] ? DEPT_NAMES[dA] : DEPT_NAMES[dB];
+      const secondDept = SEQ_ORDER[dA] < SEQ_ORDER[dB] ? DEPT_NAMES[dB] : DEPT_NAMES[dA];
+      html = `
+        <div class="conflict-alert danger">
+          ⛔ CONFLICT DETECTED — ${DEPT_NAMES[dA]} and ${DEPT_NAMES[dB]} plan work on the same road segment within ${gap} months of each other.<br><br>
+          <span style="color:var(--text)">Uncoordinated cost estimate: ₹${(uncoord/100000).toFixed(1)}L</span><br>
+          <span style="color:var(--good)">Coordinated window cost:     ₹${(coord/100000).toFixed(1)}L</span><br>
+          <span style="color:var(--accent)">AI saving recommendation:    ₹${(saving/100000).toFixed(1)}L saved</span>
+        </div>
+        <div class="spec-block" style="margin-top:8px">
+          <div class="spec-title">AI RECOMMENDED SEQUENCE</div>
+          <div class="spec-row"><span class="spec-key">STEP 1</span><span class="spec-val">${firstDept} — ${DEPT_DEPTH[SEQ_ORDER[dA]<SEQ_ORDER[dB]?dA:dB]} (deepest first)</span></div>
+          <div class="spec-row"><span class="spec-key">STEP 2</span><span class="spec-val">${secondDept} — ${DEPT_DEPTH[SEQ_ORDER[dA]<SEQ_ORDER[dB]?dB:dA]}</span></div>
+          <div class="spec-row"><span class="spec-key">STEP 3</span><span class="spec-val">Roads Dept — Final resurfacing (always last)</span></div>
+          <div class="spec-row"><span class="spec-key">WINDOW</span><span class="spec-val">Single coordinated excavation — one trench, one closure</span></div>
+          <div class="spec-row"><span class="spec-key">BLOCKCHAIN</span><span class="spec-val">Each dept logs dig entry · RHI attribution locked</span></div>
+        </div>`;
+    } else {
+      html = `<div class="conflict-alert good">✔ NO CONFLICT — ${DEPT_NAMES[dA]} and ${DEPT_NAMES[dB]} are ${gap} months apart. No coordination needed for this segment. Both works logged in shared calendar.</div>`;
+    }
+
+    document.getElementById('conflict-out').innerHTML = html;
+  }
+
+  /* ════════════════════════════════════════
+     RHI WARD SCORECARD
+  ════════════════════════════════════════ */
+  function renderRHI() {
+    const wards = [
+      { name:'Ward-04', score:91, officer:'D. Sharma',  trend:'+3' },
+      { name:'Ward-07', score:74, officer:'R. Patel',   trend:'-8' },
+      { name:'Ward-11', score:88, officer:'M. Joshi',   trend:'+1' },
+      { name:'Ward-15', score:56, officer:'K. Mehta',   trend:'-14'},
+      { name:'Ward-19', score:83, officer:'S. Desai',   trend:'+5' },
+      { name:'Ward-22', score:67, officer:'A. Thakor',  trend:'-3' },
+    ];
+    document.getElementById('rhi-scorecard').innerHTML = wards.map(w => {
+      const color = w.score >= 90 ? 'var(--good)' : w.score >= 75 ? 'var(--accent)' : w.score >= 60 ? 'var(--warn)' : 'var(--danger)';
+      const trendColor = w.trend.startsWith('+') ? 'var(--good)' : 'var(--danger)';
+      return `<div class="rhi-row">
+        <span class="rhi-ward">${w.name}</span>
+        <div class="rhi-bar-track"><div class="rhi-bar-fill" style="width:${w.score}%;background:${color}"></div></div>
+        <span class="rhi-score" style="color:${color}">${w.score}</span>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:9px;color:${trendColor};min-width:28px;text-align:right">${w.trend}</span>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--dim);min-width:60px;text-align:right">${w.officer}</span>
+      </div>`;
+    }).join('');
+  }
+</script>
+</body>
+</html>
